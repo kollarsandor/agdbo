@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SERVER="ubuntu@91.134.72.253"
-SSH_KEY="$HOME/.ssh/id_ed25519"
+SSH_KEY="${OVH_SSH_KEY:-$HOME/.ssh/id_ed25519}"
 DEPLOY_DIR="/opt/agdb"
 REGISTRY_PATH="/var/lib/agdb/registry.agdb"
 DATA_ROOT="/var/lib/agdb/tenants"
