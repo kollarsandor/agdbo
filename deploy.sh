@@ -2,7 +2,13 @@
 set -euo pipefail
 
 SERVER="ubuntu@91.134.72.253"
-SSH_KEY="${OVH_SSH_KEY:-$HOME/.ssh/id_ed25519}"
+SCRIPT_DIR_EARLY="$(cd "$(dirname "$0")" && pwd)"
+# Prefer project-local key, then env var path, then default
+if [ -f "${SCRIPT_DIR_EARLY}/.deploy_key" ]; then
+  SSH_KEY="${SCRIPT_DIR_EARLY}/.deploy_key"
+else
+  SSH_KEY="${OVH_SSH_KEY:-$HOME/.ssh/id_ed25519}"
+fi
 DEPLOY_DIR="/opt/agdb"
 REGISTRY_PATH="/var/lib/agdb/registry.agdb"
 DATA_ROOT="/var/lib/agdb/tenants"
