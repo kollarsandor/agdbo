@@ -9,16 +9,25 @@ DATA_ROOT="/var/lib/agdb/tenants"
 RUNNER_PATH="/usr/lib/agdb/sandbox_runner"
 CLOUD_PORT="7070"
 ZIG_VERSION="0.14.0"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ZIG_DIR="/tmp/zig-linux-x86_64-${ZIG_VERSION}"
 ZIG="${ZIG_DIR}/zig"
 
-echo "==> Checking Zig ${ZIG_VERSION}..."
-if [ ! -f "$ZIG" ]; then
-  echo "    Downloading Zig ${ZIG_VERSION}..."
-  curl -sL "https://ziglang.org/download/${ZIG_VERSION}/zig-linux-x86_64-${ZIG_VERSION}.tar.xz" \
-    -o "/tmp/zig-${ZIG_VERSION}.tar.xz"
-  tar -xf "/tmp/zig-${ZIG_VERSION}.tar.xz" -C /tmp/
-  echo "    Zig ${ZIG_VERSION} ready."
+# Prefer local project ./zig if available
+if [ -f "${SCRIPT_DIR}/zig" ]; then
+  ZIG="${SCRIPT_DIR}/zig"
+  ZIG_DIR="$(dirname "$ZIG")"
+  echo "==> Using project-local Zig: $ZIG"
+else
+  echo "==> Checking Zig ${ZIG_VERSION}..."
+  if [ ! -f "$ZIG" ]; then
+    echo "    Downloading Zig ${ZIG_VERSION}..."
+    curl -sL "https://ziglang.org/download/${ZIG_VERSION}/zig-linux-x86_64-${ZIG_VERSION}.tar.xz" \
+      -o "/tmp/zig-${ZIG_VERSION}.tar.xz"
+    tar -xf "/tmp/zig-${ZIG_VERSION}.tar.xz" -C /tmp/
+    echo "    Zig ${ZIG_VERSION} ready."
+  fi
+  echo "==> Using Zig: $ZIG"
 fi
 export PATH="${ZIG_DIR}:$PATH"
 
