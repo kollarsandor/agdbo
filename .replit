@@ -1,4 +1,4 @@
-modules = ["zig-0.14"]
+modules = ["zig-0.14", "nodejs-20", "python-3.11"]
 [agent]
 expertMode = true
 
