@@ -1,1 +1,0 @@
-/tmp/zig-linux-x86_64-0.14.0/zig
