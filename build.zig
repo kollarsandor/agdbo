@@ -63,6 +63,24 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(runtime_exe);
 
+    const cloud_mod = b.createModule(.{
+        .root_source_file = b.path("src/cloud_main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    cloud_mod.addImport("build_options", build_options_mod);
+
+    const cloud_exe = b.addExecutable(.{
+        .name = "agdb-cloud",
+        .root_module = cloud_mod,
+    });
+    b.installArtifact(cloud_exe);
+
+    const cloud_run_cmd = b.addRunArtifact(cloud_exe);
+    cloud_run_cmd.step.dependOn(b.getInstallStep());
+    const cloud_run_step = b.step("run-cloud", "Run the agdb cloud server");
+    cloud_run_step.dependOn(&cloud_run_cmd.step);
+
     const lib_tests = b.addTest(.{
         .root_module = lib_mod,
     });

@@ -1,0 +1,2 @@
+- [Zig 0.14 build fixes](zig-0.14-fixes.md) — @atomicFence removed in 0.14; use inline asm mfence/compiler fence instead
+- [agdb-cloud binary layout](agdb-cloud-layout.md) — 4 binaries produced; all must be deployed together for cloud to function

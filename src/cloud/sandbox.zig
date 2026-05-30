@@ -232,7 +232,7 @@ pub fn spawnTenantSandbox(tenant: registry.TenantRecord) !SandboxHandle {
         .pid = @intCast(pid),
         .cgroup_fd = cgroup_fd,
         .ipc_fd = sv[0],
-        .last_activity_ns = std.time.nanoTimestamp(),
+        .last_activity_ns = @intCast(std.time.nanoTimestamp()),
     };
 }
 

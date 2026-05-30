@@ -113,7 +113,7 @@ pub const ProcessTable = struct {
         self.mu.lock();
         defer self.mu.unlock();
         if (self.lookupLocked(tenant_id)) |h| {
-            h.last_activity_ns = std.time.nanoTimestamp();
+            h.last_activity_ns = @intCast(std.time.nanoTimestamp());
         }
     }
 
@@ -203,13 +203,13 @@ pub const ProcessTable = struct {
 
     pub fn runDispatchLoop(self: *ProcessTable) !void {
         var events: [64]std.os.linux.epoll_event = undefined;
-        var last_sweep_ns = std.time.nanoTimestamp();
+        var last_sweep_ns: i64 = @intCast(std.time.nanoTimestamp());
 
         while (true) {
             const rc = std.os.linux.epoll_wait(self.epoll_fd, &events, 64, 5000);
             const err = std.posix.errno(rc);
 
-            const now = std.time.nanoTimestamp();
+            const now: i64 = @intCast(std.time.nanoTimestamp());
             if (now - last_sweep_ns > 5 * std.time.ns_per_s) {
                 self.reapZombies();
                 self.reapIdleSandboxes(now);

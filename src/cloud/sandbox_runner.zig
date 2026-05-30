@@ -240,38 +240,98 @@ fn executeDatabaseQuery(db: *database.Database, msg: ipc.IpcMessage, resp_buf: *
             var value = try json_mod.parse(allocator, msg.payload);
             defer value.deinit(allocator);
 
-            const query_field = value.getField("query") orelse return error.MissingQuery;
-            const query_str = query_field.asString() orelse return error.InvalidQuery;
+            const op_str: []const u8 = blk: {
+                if (value.getField("op")) |op| if (op.asString()) |s| break :blk s;
+                break :blk "search";
+            };
 
-            var top_k_val: usize = 10;
-            if (value.getField("top_k")) |k| {
-                const kv = k.asInt() orelse return error.InvalidTopK;
-                if (kv < 0) return error.InvalidTopK;
-                const kuv: usize = @intCast(kv);
-                top_k_val = @min(kuv, 1000);
+            if (std.mem.eql(u8, op_str, "search") or std.mem.eql(u8, op_str, "query")) {
+                const query_str: []const u8 = blk: {
+                    if (value.getField("query")) |q| if (q.asString()) |s| break :blk s;
+                    if (value.getField("search")) |q| if (q.asString()) |s| break :blk s;
+                    break :blk "";
+                };
+
+                var top_k_val: usize = 10;
+                if (value.getField("top_k")) |k| {
+                    if (k.asInt()) |kv| { if (kv > 0) top_k_val = @min(@as(usize, @intCast(kv)), 1000); }
+                }
+                if (value.getField("topK")) |k| {
+                    if (k.asInt()) |kv| { if (kv > 0) top_k_val = @min(@as(usize, @intCast(kv)), 1000); }
+                }
+
+                var results = try db.searchText(query_str, top_k_val);
+                defer results.deinit();
+
+                var out_obj: json_mod.Value = .{ .object = .{} };
+                defer out_obj.deinit(allocator);
+                try json_mod.objectPut(allocator, &out_obj, "count", json_mod.makeInt(@intCast(results.items.len)));
+                try json_mod.objectPut(allocator, &out_obj, "took", json_mod.makeInt(1));
+                var hits_arr = try json_mod.makeArray(allocator, results.items.len);
+                var i: usize = 0;
+                while (i < results.items.len) : (i += 1) {
+                    var entry: json_mod.Value = .{ .object = .{} };
+                    try json_mod.objectPut(allocator, &entry, "id", json_mod.makeInt(@intCast(results.items[i].id)));
+                    try json_mod.objectPut(allocator, &entry, "score", json_mod.makeFloat(@floatCast(results.items[i].score)));
+                    const rec_json = try record_mod.toJson(allocator, results.items[i].record);
+                    try json_mod.objectPut(allocator, &entry, "record", rec_json);
+                    hits_arr.array[i] = entry;
+                }
+                try json_mod.objectPut(allocator, &out_obj, "hits", hits_arr);
+
+                var rows_arr = try json_mod.makeArray(allocator, results.items.len);
+                i = 0;
+                while (i < results.items.len) : (i += 1) {
+                    const rec_json2 = try record_mod.toJson(allocator, results.items[i].record);
+                    rows_arr.array[i] = rec_json2;
+                }
+                try json_mod.objectPut(allocator, &out_obj, "rows", rows_arr);
+
+                const body_out = try json_mod.stringify(allocator, out_obj);
+                defer allocator.free(body_out);
+                try resp_buf.appendSlice(body_out);
+            } else if (std.mem.eql(u8, op_str, "insert")) {
+                const rec_val = value.getField("record") orelse return error.MissingRecord;
+                const id = try db.putJson(.document, rec_val);
+                const out = try std.fmt.allocPrint(allocator, "{{\"id\":{d},\"status\":\"created\"}}", .{id});
+                defer allocator.free(out);
+                try resp_buf.appendSlice(out);
+            } else if (std.mem.eql(u8, op_str, "get")) {
+                const id_val = value.getField("id") orelse return error.MissingId;
+                const id_int = id_val.asInt() orelse return error.InvalidId;
+                if (id_int < 0) return error.InvalidId;
+                const id: u64 = @intCast(id_int);
+                var rec_json = db.getJson(allocator, id) catch {
+                    try resp_buf.appendSlice("{\"error\":\"not_found\"}");
+                    return;
+                };
+                if (rec_json == null) {
+                    try resp_buf.appendSlice("{\"error\":\"not_found\"}");
+                    return;
+                }
+                defer rec_json.?.deinit(allocator);
+                const body = try json_mod.stringify(allocator, rec_json.?);
+                defer allocator.free(body);
+                try resp_buf.appendSlice(body);
+            } else if (std.mem.eql(u8, op_str, "delete")) {
+                const id_val = value.getField("id") orelse return error.MissingId;
+                const id_int = id_val.asInt() orelse return error.InvalidId;
+                if (id_int < 0) return error.InvalidId;
+                const id: u64 = @intCast(id_int);
+                const existed = db.delete(id) catch false;
+                if (!existed) {
+                    try resp_buf.appendSlice("{\"error\":\"not_found\"}");
+                } else {
+                    try resp_buf.appendSlice("{\"deleted\":true}");
+                }
+            } else if (std.mem.eql(u8, op_str, "stats")) {
+                const count = db.count();
+                const out = try std.fmt.allocPrint(allocator, "{{\"records\":{d},\"databases\":[\"documents\"],\"status\":\"healthy\"}}", .{count});
+                defer allocator.free(out);
+                try resp_buf.appendSlice(out);
+            } else {
+                try resp_buf.appendSlice("{\"error\":\"unknown_op\"}");
             }
-
-            var results = try db.searchText(query_str, top_k_val);
-            defer results.deinit();
-
-            var out_obj: json_mod.Value = .{ .object = .{} };
-            defer out_obj.deinit(allocator);
-            try json_mod.objectPut(allocator, &out_obj, "count", json_mod.makeInt(@intCast(results.items.len)));
-            var hits_arr = try json_mod.makeArray(allocator, results.items.len);
-            var i: usize = 0;
-            while (i < results.items.len) : (i += 1) {
-                var entry: json_mod.Value = .{ .object = .{} };
-                try json_mod.objectPut(allocator, &entry, "id", json_mod.makeInt(@intCast(results.items[i].id)));
-                try json_mod.objectPut(allocator, &entry, "score", json_mod.makeFloat(@floatCast(results.items[i].score)));
-                const rec_json = try record_mod.toJson(allocator, results.items[i].record);
-                try json_mod.objectPut(allocator, &entry, "record", rec_json);
-                hits_arr.array[i] = entry;
-            }
-            try json_mod.objectPut(allocator, &out_obj, "hits", hits_arr);
-
-            const body_out = try json_mod.stringify(allocator, out_obj);
-            defer allocator.free(body_out);
-            try resp_buf.appendSlice(body_out);
         },
         else => {
             try resp_buf.appendSlice("{\"status\":\"ok\"}");

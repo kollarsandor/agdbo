@@ -1559,7 +1559,7 @@ pub fn secureZeroMemory(ptr: [*]u8, size: usize) void {
     const p: [*]volatile u8 = @ptrCast(ptr);
     var i: usize = 0;
     while (i < size) : (i += 1) p[i] = 0;
-    @fence(.seq_cst);
+    asm volatile ("mfence" ::: "memory");
 }
 
 pub fn constantTimeCompare(a: []const u8, b: []const u8) bool {
@@ -1602,15 +1602,15 @@ pub fn pageAlignedSize(size: usize) usize {
 }
 
 pub fn memoryBarrier() void {
-    @fence(.seq_cst);
+    asm volatile ("mfence" ::: "memory");
 }
 
 pub fn readMemoryFence() void {
-    @fence(.acquire);
+    asm volatile ("" ::: "memory");
 }
 
 pub fn writeMemoryFence() void {
-    @fence(.release);
+    asm volatile ("" ::: "memory");
 }
 
 pub fn compareExchangeMemory(ptr: *u64, expected: u64, desired: u64) bool {
@@ -1667,7 +1667,7 @@ pub fn secureErase(ptr: [*]u8, size: usize) void {
     while (i < size) : (i += 1) p[i] = 0xAA;
     i = 0;
     while (i < size) : (i += 1) p[i] = 0x00;
-    @fence(.seq_cst);
+    asm volatile ("mfence" ::: "memory");
 }
 
 pub fn duplicateMemory(allocator: Allocator, data: []const u8) ![]u8 {

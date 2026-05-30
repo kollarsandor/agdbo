@@ -144,10 +144,28 @@ pub const Registry = struct {
         };
 
         self.db.kv.put(email_key, &id_buf) catch |err| {
-            self.db.kv.delete(tenant_key) catch {};
+            _ = self.db.kv.delete(tenant_key) catch false;
             std.fs.cwd().deleteTree(dir_path[0 .. dir_path.len - 1]) catch {};
             return err;
         };
+
+        var list_key_buf: [32]u8 = undefined;
+        const list_key = std.fmt.bufPrint(&list_key_buf, "tenant_list", .{}) catch unreachable;
+        if (self.db.kv.get(self.allocator, list_key) catch null) |existing| {
+            defer self.allocator.free(existing);
+            var new_list = std.ArrayList(u8).init(self.allocator);
+            defer new_list.deinit();
+            new_list.appendSlice(existing) catch {};
+            if (existing.len > 0) new_list.append(',') catch {};
+            var id_str_buf: [24]u8 = undefined;
+            const id_str = std.fmt.bufPrint(&id_str_buf, "{d}", .{tenant_id}) catch unreachable;
+            new_list.appendSlice(id_str) catch {};
+            self.db.kv.put(list_key, new_list.items) catch {};
+        } else {
+            var id_str_buf: [24]u8 = undefined;
+            const id_str = std.fmt.bufPrint(&id_str_buf, "{d}", .{tenant_id}) catch unreachable;
+            self.db.kv.put(list_key, id_str) catch {};
+        }
 
         return record;
     }
@@ -178,7 +196,7 @@ pub const Registry = struct {
         if (was_set) {
             var old_ak_buf: [128]u8 = undefined;
             const old_ak = try apiKeyKey(&old_ak_buf, old_hash);
-            self.db.kv.delete(old_ak) catch {};
+            _ = self.db.kv.delete(old_ak) catch false;
         }
 
         record.api_key_hash = key_hash;
@@ -244,10 +262,60 @@ pub const Registry = struct {
         if (was_set) {
             var ak_buf: [128]u8 = undefined;
             const ak = try apiKeyKey(&ak_buf, record.api_key_hash);
-            self.db.kv.delete(ak) catch {};
+            _ = self.db.kv.delete(ak) catch false;
         }
 
         record.active = 0;
         try self.db.kv.put(tenant_key, std.mem.asBytes(&record));
+    }
+
+    pub fn storeTenantEmail(self: *Registry, tenant_id: u64, email: []const u8) !void {
+        self.mu.lock();
+        defer self.mu.unlock();
+        var key_buf: [64]u8 = undefined;
+        const key = try std.fmt.bufPrint(&key_buf, "temail:{d}", .{tenant_id});
+        try self.db.kv.put(key, email);
+    }
+
+    pub fn getTenantEmail(self: *Registry, allocator: std.mem.Allocator, tenant_id: u64) !?[]u8 {
+        self.mu.lock();
+        defer self.mu.unlock();
+        var key_buf: [64]u8 = undefined;
+        const key = try std.fmt.bufPrint(&key_buf, "temail:{d}", .{tenant_id});
+        return self.db.kv.get(allocator, key);
+    }
+
+    pub fn storePlainApiKey(self: *Registry, tenant_id: u64, plain_key: []const u8) !void {
+        self.mu.lock();
+        defer self.mu.unlock();
+        var key_buf: [64]u8 = undefined;
+        const key = try std.fmt.bufPrint(&key_buf, "plainkey:{d}", .{tenant_id});
+        try self.db.kv.put(key, plain_key);
+    }
+
+    pub fn getPlainApiKey(self: *Registry, allocator: std.mem.Allocator, tenant_id: u64) !?[]u8 {
+        self.mu.lock();
+        defer self.mu.unlock();
+        var key_buf: [64]u8 = undefined;
+        const key = try std.fmt.bufPrint(&key_buf, "plainkey:{d}", .{tenant_id});
+        return self.db.kv.get(allocator, key);
+    }
+
+    pub fn storeKV(self: *Registry, kv_key: []const u8, value: []const u8) !void {
+        self.mu.lock();
+        defer self.mu.unlock();
+        try self.db.kv.put(kv_key, value);
+    }
+
+    pub fn getKV(self: *Registry, allocator: std.mem.Allocator, kv_key: []const u8) !?[]u8 {
+        self.mu.lock();
+        defer self.mu.unlock();
+        return self.db.kv.get(allocator, kv_key);
+    }
+
+    pub fn deleteKV(self: *Registry, kv_key: []const u8) void {
+        self.mu.lock();
+        defer self.mu.unlock();
+        _ = self.db.kv.delete(kv_key) catch false;
     }
 };
