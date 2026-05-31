@@ -1,4 +1,0 @@
-- [Zig 0.14 build fixes](zig-0.14-fixes.md) — @atomicFence removed in 0.14; use inline asm mfence/compiler fence instead
-- [agdb-cloud binary layout](agdb-cloud-layout.md) — 4 binaries produced; all must be deployed together for cloud to function
-- [SSH key persistence](ssh-key-persistence.md) — ~/.ssh/ is wiped on Replit container restart; key is saved to .deploy_key in project root
-- [OVH instance recreation](ovh-instance-recreation.md) — snapshot e50514a5 requires 50GB disk (minDisk=50); must use flex flavor (b3-8-flex used successfully)
